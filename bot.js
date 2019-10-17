@@ -3,6 +3,7 @@
 
 const { ActivityHandler,CardFactory,ActivityTypes } = require('botbuilder');
 const fs = require("fs");
+const fs_path = "./log/diary";
 
 const drinks = {
     "water" : "https://i.pinimg.com/originals/a2/c7/ba/a2c7bad51bf0fb1ccdcada8916d08774.gif",
@@ -19,7 +20,7 @@ const drinks = {
 };
 
 const salutation =  [
-    "hello","greetings","salutations","good evening","good morning","aloha","hi","sup","good afternoon","good day","hey","howdy","heya","bonjour"
+    "hello","greetings","salutations","good evening","good morning","aloha","hi","hola","sup","good afternoon","good day","hey","howdy","heya","bonjour"
 ];
 
 const thanks = [
@@ -29,62 +30,99 @@ const thanks = [
 class MyBot extends ActivityHandler {
     constructor() {
         super();
+        //Writes - 0 : Not in writing or removing mode; 1 : The user's writing; 2 : The user wants to remove his page.
+        let writes = 0;
         // See https://aka.ms/about-bot-activity-message to learn more about the message and other activity types.
         this.onMessage(async (context, next) => {
+            //Context Flag - 0 : Context not found (or not found yet); 1 : Context found.
             let cntxt = 0;
-            console.log(cntxt);
             const mex = context.activity.text.toLocaleLowerCase();
 
-            if(mex.includes("drink")&&cntxt==0){
-                await context.sendActivity("\"Which one, sir?\"");
-                cntxt = 1;
-            }//if
-
-            //The user wants to write in the log file.
-            if(cntxt==2){
-                fs.writeFile("./log/diary", mex, function(err) {
+            //Writing, Reading and Removing Session - Level 1
+            //The user is currently writing on the log file.
+            if(writes==1 && cntxt==0){
+                fs.appendFile(fs_path, mex+"\n\n", function(err) {
                     if(err) {
                         return console.log(err);
                     }//if
-                });
-                
-                await context.sendActivity("\"Hope it helped you\" *takes diary from your hand and put it under the bar counter*");
-                
+                });//appendFile
+                await context.sendActivity("\"Hope it helped you\"\n\n*takes diary from your hand and put it under the bar counter*");
+                writes=0;
                 cntxt=1;
-            }
+            }//if-writes
 
-            if(mex.includes("write")&&cntxt==0){
-                await context.sendActivity("\"Here's your log file, sir. Write everything's up on your mind.\"");
-                cntxt=2;
-            }
+            //The user wants to write in the log file.
+            if(mex.includes("write") && writes==0 && cntxt==0){
+                await context.sendActivity("*takes a diary from under the bar corner and lends it to you*\n\n\"Here's your diary, sir. Write everything's up on your mind.\"");
+                writes=1;
+                cntxt=1;
+            }//if-wants-write
             
-            if(mex.includes("read")&&cntxt==0){
-                let con;
-                await context.sendActivity("\"I'll read your diary, sir, if you please.\" *clears throat");
-                fs.readFile('DATA', 'utf8', function(err, contents) {
-                   con = contents;
-                });
-                await context.sendActivity(con);
-            }//if
+            //The user wants to let the bot read his file
+            if(mex.includes("read") && writes==0 && cntxt==0){
+                await context.sendActivity("*Takes a diary from under the bar corner and opens it*\n\n\"I'll read your diary, sir, if you please.\"\n\n*clears throat*");
+                fs.readFile(fs_path, 'utf8', function(err, contents) {
+                    if(contents==undefined) contents="...";
+                    context.sendActivity(contents+
+                        "\n\n\"Hope my interpretation was satisfying\"\n\n*takes diary from your hand and put it under the bar counter*");
+                });//readfile
+                await context.sendActivity("");
+                cntxt=1;
+            }//if-wants-read
 
-            if(this.getMex(drinks,mex)&&cntxt==0){
+            if(writes==2 && cntxt==0){
+                if(mex.includes('yes')){
+                    fs.unlink(fs_path, (err) => {
+                        if (err) {
+                        return console.error(err)
+                        }
+                        //file removed
+                    })//unlink
+                    await context.sendActivity("*tears the written page of the diary apart and puts the diary under the bar corner*\n\n\"Done sir. Anything else?\"");
+                }//if-said-yes
+                else{
+                    await context.sendActivity("*puts the diary under the bar corner*\n\n\"I won't tear the written page apart, for now.\"");
+                }//else-anything
+                writes=0;
+                cntxt =1;
+            }
+
+            //The user wants to delete his written page of the diary.
+            if((mex.includes("remove") || mex.includes("delete")) && writes==0 && cntxt==0){
+                await context.sendActivity("*takes the diary from under the bar corner and opens it*\n\n\"Are you sure you want me to tear this page apart, sir?\"");
+                writes = 2;
+                cntxt = 1;
+            }//if-remove
+            
+
+            //Serving the user with the drink he asked for - Level 2
+            if(this.getMex(drinks,mex) && writes==0 && cntxt==0){
                 const drink = this.getMex(drinks,mex);
                 await context.sendActivity({ attachments: [this.createAnimationCard(drinks[drink],drink)] });
                 await context.sendActivity("\"Here's your "+drink+". Enjoy\"");
                 cntxt = 1;
-            }
+            }//if-asked-for-drink
 
-            if(this.getMex(salutation,mex)&&cntxt==0){
-                await context.sendActivity("\"Hello, sir. Can I take your order?\"");
+            //Asking for a drink - Level 3
+            if(mex.includes("drink")&&writes==0 && cntxt==0){
+                await context.sendActivity("\"Which one, sir?\"");
                 cntxt = 1;
-            }
+            }//if-wants-drink
 
-            if(this.getMex(thanks,mex)&&cntxt==0){
+
+            //Greetings and Thanks - Level 4
+            if(this.getMex(thanks,mex) && writes==0 && cntxt==0){
                 await context.sendActivity("\"You're welcome.\"");
                 cntxt=1;
-            }//if
+            }//if-thanks
 
-            if(cntxt == 0){
+            if(this.getMex(salutation,mex) && writes==0 && cntxt==0){
+                await context.sendActivity("\"Hello, sir. Can I take your order?\"");
+                cntxt = 1;
+            }//if-greetings
+
+            //Didn't find any match - Level 0
+            if(cntxt == 0 && writes==0){
                 await context.sendActivity("\"We don't do that here. I'm sorry.\"");
             }//if
 
