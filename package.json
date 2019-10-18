@@ -18,6 +18,7 @@
     "dependencies": {
         "botbuilder": "~4.5.1",
         "dotenv": "~8.0.0",
+        "moment": "^2.24.0",
         "restify": "~8.3.3"
     },
     "devDependencies": {

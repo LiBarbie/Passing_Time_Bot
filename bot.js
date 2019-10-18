@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-const { ActivityHandler,CardFactory,ActivityTypes } = require('botbuilder');
+const { ActivityHandler,CardFactory,ActivityTypes, MessageFactory } = require('botbuilder');
 const fs = require("fs");
-const fs_path = "./log/diary";
+const fs_dir = "./log";
+let fs_path = fs_dir+"/diary";
 
 const drinks = {
     "water" : "https://i.pinimg.com/originals/a2/c7/ba/a2c7bad51bf0fb1ccdcada8916d08774.gif",
@@ -30,6 +31,10 @@ const thanks = [
 class MyBot extends ActivityHandler {
     constructor() {
         super();
+        //Gets the current date
+        const date = this.get_this_date();
+        fs_path = fs_path+date;
+
         //Writes - 0 : Not in writing or removing mode; 1 : The user's writing; 2 : The user wants to remove his page.
         let writes = 0;
         // See https://aka.ms/about-bot-activity-message to learn more about the message and other activity types.
@@ -46,7 +51,7 @@ class MyBot extends ActivityHandler {
                         return console.log(err);
                     }//if
                 });//appendFile
-                await context.sendActivity("\"Hope it helped you\"\n\n*takes diary from your hand and put it under the bar counter*");
+                await context.sendActivity("\"Hope it helped you\"\n\n*takes the diary from your hand and puts it under the bar counter*");
                 writes=0;
                 cntxt=1;
             }//if-writes
@@ -57,14 +62,19 @@ class MyBot extends ActivityHandler {
                 writes=1;
                 cntxt=1;
             }//if-wants-write
-            
+
+            if(mex.includes("read") && writes==0 && cntxt==0){
+                await context.sendPages(context);
+                cntxt=1;
+            }//if-wants-read
+
             //The user wants to let the bot read his file
             if(mex.includes("read") && writes==0 && cntxt==0){
                 await context.sendActivity("*Takes a diary from under the bar corner and opens it*\n\n\"I'll read your diary, sir, if you please.\"\n\n*clears throat*");
                 fs.readFile(fs_path, 'utf8', function(err, contents) {
                     if(contents==undefined) contents="...";
                     context.sendActivity(contents+
-                        "\n\n\"Hope my interpretation was satisfying\"\n\n*takes diary from your hand and put it under the bar counter*");
+                        "\n\n\"...Hope my interpretation was satisfying\"\n\n*puts the diary under the bar counter*");
                 });//readfile
                 await context.sendActivity("");
                 cntxt=1;
@@ -142,6 +152,7 @@ class MyBot extends ActivityHandler {
                    await context.sendActivity("\"Welcome to the Feels Bar. Please take a seat if you want.\"");
                 }
             }
+            
             // By calling next() you ensure that the next BotHandler is run.
             await next();
         });
@@ -179,6 +190,41 @@ class MyBot extends ActivityHandler {
             }
         );
     }
+
+    get_this_date(){
+        let ts = Date.now();
+
+        let date_ob = new Date(ts);
+        let date = date_ob.getDate();
+        let month = date_ob.getMonth() + 1;
+        let year = date_ob.getFullYear();
+
+        // prints date & time in YYYY-MM-DD format
+        return (year + "-" + month + "-" + date);
+    }//getDate()
+
+    ifDate(mex){
+        try{
+            const mexDate = new Date(mex).toISOString();
+            return mexDate;
+        }
+        catch(error){
+            return false;
+        }
+    }//ifDate
+
+    
+    async sendPages(turnContext) {
+        let reply;
+        let array=[];
+        fs.readdirSync(fs_dir).forEach(file => {
+            file = file.replace("diary","");
+            array.push(file);
+        });
+        reply = MessageFactory.suggestedActions(array,
+        "*takes the diary from under the bar corner and opens it*\n\n\"Which page, sir?\"");
+        await turnContext.sendActivity(reply);
+    }//sendPages
 }
 
 module.exports.MyBot = MyBot;
